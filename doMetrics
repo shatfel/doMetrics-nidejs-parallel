@@ -1,0 +1,80 @@
+#!/usr/local/bin/zsh 
+
+
+## verbose
+local _fVerbose=${fVerbos:=false}
+
+## what check
+local monParam="${1:=NULL}"
+
+## if nothig to check exit
+[[ ${monParam} == "NULL" ]] && {
+  printf "/e/ usage: [fVerbose=true|false] `basename ${0}` <freemem|la1|la5|la15>\n"
+  exit 1
+  }
+
+
+## max sec to check or 0 for unlimited
+local maxCheckTime=0
+
+## module prefix
+local _prefix="test_os_`basename ${0}`"
+## check timeout
+local timeout=3
+## log path
+##local _logF="./log/${monParam}"
+local _logF="./log/${_prefix}-$(date +%Y%m%d).log"
+## log header
+local logHeader="NN;Date;Time;Value;Parameter"
+## log string template
+local logTmpl="%d;%s;%s;%s;${monParam}"
+## start time
+local _time=0
+## count
+local count=0
+
+###
+## beVerboes()
+###
+function beVerbose() {
+  let  _r = [ true == ${fVerbose} ]
+  return _r
+  }
+
+## clear log
+[[ ! -f ${_logF} ]] && \
+  echo "${logHeader}" > ${_logF}
+
+## checking metrics
+while true; do
+  ## get metrics
+  local _q="`curl -s http://localhost:3001/metrics`"
+  ## get nedded param
+  local _param="`echo "${_q}"|grep ${monParam}|cut -d' ' -f2`"
+
+  ## counter update
+  count=`expr ${count} + 1`
+
+  ## save new value
+  printf -v _param "${logTmpl}" "${count}" "$(date +%Y-%m-%d)" "$(date +%H:%M:%S)" "${_param} "
+  ## save new value
+  echo "${_param}" | tr -d '\ \n' >> ${_logF}
+  
+  [[ ! beVerbose ]] && printf "${_param}"  
+  
+  _time=`expr ${_time} + ${timeout}`
+  
+  ## if not unlimited
+  [[ ${maxCheckTime} != 0 ]] && { 
+      ## and time is not elapsed
+      [[ ${_time} -gt ${maxCheckTime} ]] && {
+        ## exit
+        break
+        exit 0
+        }
+    }
+  
+  ## sleep
+  sleep ${timeout}
+  done
+
